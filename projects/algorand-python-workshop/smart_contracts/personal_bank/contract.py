@@ -1,5 +1,5 @@
 from algopy import Account, ARC4Contract, BoxMap, Global, Txn, UInt64, gtxn, itxn
-from algopy.arc4 import abimethod
+from algopy.arc4 import abimethod, String
 
 
 class PersonalBank(ARC4Contract):
@@ -11,9 +11,10 @@ class PersonalBank(ARC4Contract):
         The BoxMap uses Account addresses as keys and UInt64 values to track deposited amounts.
         """
         self.depositors = BoxMap(Account, UInt64, key_prefix="")
+        self.github = BoxMap(Account, String, key_prefix="gh_")
 
     @abimethod()
-    def deposit(self, pay_txn: gtxn.PaymentTransaction) -> UInt64:
+    def deposit(self, pay_txn: gtxn.PaymentTransaction, github_handle: String) -> UInt64:
         """Deposits funds into the personal bank
 
         This method accepts a payment transaction and records the deposit amount in the sender's BoxMap.
@@ -21,6 +22,7 @@ class PersonalBank(ARC4Contract):
 
         Args:
             pay_txn: The payment transaction containing deposit information
+            github_handle: The GitHub handle of the sender
 
         Returns:
             The total amount deposited by the sender after this transaction (as UInt64)
@@ -35,6 +37,8 @@ class PersonalBank(ARC4Contract):
         if deposited:
             self.depositors[pay_txn.sender] += pay_txn.amount
         else:
+            assert github_handle, "GitHub handle is required for new depositors"
+            self.github[pay_txn.sender] = github_handle
             self.depositors[pay_txn.sender] = pay_txn.amount
 
         return self.depositors[pay_txn.sender]
@@ -61,3 +65,16 @@ class PersonalBank(ARC4Contract):
         self.depositors[Txn.sender] = UInt64(0)
 
         return result.amount
+    
+    @abimethod()
+    def get_github_handle(self) -> String:
+        """Retrieves the GitHub handle of the sender
+
+        This method returns the GitHub handle associated with the sender's account.
+        If no handle is found, an empty string is returned.
+
+        Returns:
+            The GitHub handle of the sender (as String)
+        """
+        github_handle, is_saved = self.github.maybe(Txn.sender)
+        return github_handle
